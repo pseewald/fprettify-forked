@@ -2288,9 +2288,11 @@ def reformat_ffile_combined(
         lines = remove_trailing_whitespace(lines)
 
         # need to shift indents if label wider than first indent
+        label_shift = 0
         if label and impose_indent:
             if indent[0] < len(label):
-                indent = [ind + len(label) - indent[0] for ind in indent]
+                label_shift = len(label) - indent[0]
+                indent = [ind + label_shift for ind in indent]
 
         allow_auto_split = auto_format and (impose_whitespace or impose_indent)
         write_formatted_line(
@@ -2307,6 +2309,8 @@ def reformat_ffile_combined(
             orig_filename,
             stream.line_nr,
             allow_split=allow_auto_split,
+            f_line=f_line,
+            label_shift=label_shift,
         )
 
         # rm subsequent blank lines
@@ -2670,15 +2674,29 @@ def _auto_split_line(line, ind_use, llength, indent_size):
     return new_lines
 
 
-def _insert_split_chunks(idx, split_lines, indent, indent_size, lines, orig_lines):
+def _aligned_chunk_indents(
+    f_line, lines, idx, split_lines, indent, indent_size, filename, line_nr
+):
+    """
+    Compute indents for auto-split chunks replacing line `idx`, matching the
+    alignment that F90Aligner will produce when the split result is
+    reformatted. This keeps auto line-splitting idempotent.
+    """
+    new_lines = lines[:idx] + split_lines + lines[idx + 1 :]
+    aligner = F90Aligner(filename)
+    aligner.process_lines_of_fline(f_line, new_lines, indent_size, line_nr)
+    rel_indents = aligner.get_lines_indent()
+    base = indent[0]
+    return [indent[idx]] + [
+        base + rel_indents[idx + pos] for pos in range(1, len(split_lines))
+    ]
+
+
+def _insert_split_chunks(idx, split_lines, indent, new_indents, lines, orig_lines):
     """Replace the original line at `idx` with its split chunks and matching indents."""
-    base_indent = indent[idx]
     indent.pop(idx)
     lines.pop(idx)
     orig_lines.pop(idx)
-
-    follow_indent = base_indent + indent_size
-    new_indents = [base_indent] + [follow_indent] * (len(split_lines) - 1)
 
     for new_line, new_indent in reversed(list(zip(split_lines, new_indents))):
         lines.insert(idx, new_line)
@@ -2748,6 +2766,8 @@ def write_formatted_line(
     filename,
     line_nr,
     allow_split,
+    f_line="",
+    label_shift=0,
 ):
     """Write reformatted line to file"""
 
@@ -2802,12 +2822,25 @@ def write_formatted_line(
         if needs_split:
             split_lines = _auto_split_line(line, ind_use, llength, indent_size)
             if split_lines:
+                chunk_indents = _aligned_chunk_indents(
+                    f_line,
+                    lines,
+                    idx,
+                    split_lines,
+                    indent,
+                    indent_size,
+                    filename,
+                    line_nr,
+                )
                 _insert_split_chunks(
-                    idx, split_lines, indent, indent_size, lines, orig_lines
+                    idx, split_lines, indent, chunk_indents, lines, orig_lines
                 )
                 label = label_use  # restore label for first split line
                 continue
-            comment_ind = max(0, padding - len(label_use)) if label_use else None
+            # the detached comment becomes a standalone comment line, so it
+            # must get the indent a reformat gives such a line: the block
+            # indent without any shift that makes room for a statement label
+            comment_ind = max(0, indent[idx] - label_shift)
             if _detach_inline_comment(
                 idx, indent, lines, orig_lines, comment_indent=comment_ind
             ):
