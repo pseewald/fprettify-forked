@@ -229,7 +229,7 @@ tests multiple times is an important check for idempotency, i.e. that running
 `fprettify` twice doesn't alter results (not yet checked
 automatically).
 
-In case of a test failure, the reported diff just shows input vs. output -- note
+In case of a test failure, the reported diff just shows input vs. output. Note
 that this diff is usually not related to the test failure, as it shows all
 changes relative to the *unformatted* Fortran code (from an external source).
 To get a diff specifically relative to the *expected* output, you need to run
@@ -277,7 +277,7 @@ expected. To examine what has changed, proceed as follows:
   failure, which is assumed to be reported as 
   `Test top-level-dir/subdir/file.f (fprettify.tests.fortrantests.FprettifyIntegrationTestCase) ... checksum FAIL`:
 
-  1. Check out the reference version of `fprettify` for which the test passes (normally, `develop` branch).
+  1. Check out the reference version of `fprettify` for which the test passes (normally, `master` branch).
   2. Run the integration test(s) via `./run_tests.py -n top-level-dir` (replacing
      `top-level-dir` with the actual directory mentioned in the test output).
   3. Check out the version of `fprettify` for which the test failed and run the integration tests again.
